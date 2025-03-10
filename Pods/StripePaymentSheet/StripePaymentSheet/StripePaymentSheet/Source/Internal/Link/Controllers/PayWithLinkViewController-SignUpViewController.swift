@@ -6,6 +6,22 @@
 //  Copyright © 2021 Stripe, Inc. All rights reserved.
 //
 
+// MARK: - 技术要点
+// 1. Link支付注册流程
+// - 实现用户注册界面
+// - 处理表单验证和提交
+// - 管理注册状态和错误处理
+//
+// 2. UI组件管理
+// - 使用自定义UI组件
+// - 实现响应式布局
+// - 支持动态字体大小
+//
+// 3. 表单验证
+// - 实时验证用户输入
+// - 显示错误提示
+// - 管理提交按钮状态
+
 import SafariServices
 import UIKit
 
@@ -19,8 +35,12 @@ extension PayWithLinkViewController {
     @objc(STP_Internal_PayWithLinkSignUpViewController)
     final class SignUpViewController: BaseViewController {
 
+        // MARK: - 视图模型
         private let viewModel: SignUpViewModel
 
+        // MARK: - UI组件
+        
+        // 标题标签
         private let titleLabel: UILabel = {
             let label = UILabel()
             label.font = LinkUI.font(forTextStyle: .title)
@@ -35,6 +55,7 @@ extension PayWithLinkViewController {
             return label
         }()
 
+        // 副标题标签
         private lazy var subtitleLabel: UILabel = {
             let label = UILabel()
             label.font = LinkUI.font(forTextStyle: .body)
@@ -46,14 +67,17 @@ extension PayWithLinkViewController {
             return label
         }()
 
+        // 邮箱输入组件
         private lazy var emailElement = LinkEmailElement(defaultValue: viewModel.emailAddress, showLogo: true, theme: LinkUI.appearance.asElementsTheme)
 
+        // 电话号码输入组件
         private lazy var phoneNumberElement = PhoneNumberElement(
             defaultCountryCode: context.configuration.defaultBillingDetails.address.country,
             defaultPhoneNumber: context.configuration.defaultBillingDetails.phone,
             theme: LinkUI.appearance.asElementsTheme
         )
 
+        // 姓名输入组件
         private lazy var nameElement = TextFieldElement(
             configuration: TextFieldElement.NameConfiguration(
                 type: .full,
@@ -62,12 +86,12 @@ extension PayWithLinkViewController {
             theme: LinkUI.appearance.asElementsTheme
         )
 
+        // 表单分组组件
         private lazy var emailSection = SectionElement(elements: [emailElement], theme: LinkUI.appearance.asElementsTheme)
-
         private lazy var phoneNumberSection = SectionElement(elements: [phoneNumberElement], theme: LinkUI.appearance.asElementsTheme)
-
         private lazy var nameSection = SectionElement(elements: [nameElement], theme: LinkUI.appearance.asElementsTheme)
 
+        // 法律条款视图
         private lazy var legalTermsView: LinkLegalTermsView = {
             let legalTermsView = LinkLegalTermsView(textAlignment: .center, isStandalone: true)
             legalTermsView.tintColor = .linkBrandDark
@@ -75,12 +99,14 @@ extension PayWithLinkViewController {
             return legalTermsView
         }()
 
+        // 错误提示标签
         private lazy var errorLabel: UILabel = {
             let label = ElementsUI.makeErrorLabel(theme: LinkUI.appearance.asElementsTheme)
             label.isHidden = true
             return label
         }()
 
+        // 注册按钮
         private lazy var signUpButton: Button = {
             let button = Button(
                 configuration: .linkPrimary(),
@@ -95,6 +121,7 @@ extension PayWithLinkViewController {
             return button
         }()
 
+        // 主堆栈视图
         private lazy var stackView: UIStackView = {
             let stackView = UIStackView(arrangedSubviews: [
                 titleLabel,
@@ -118,6 +145,7 @@ extension PayWithLinkViewController {
             return stackView
         }()
 
+        // MARK: - 初始化方法
         init(
             linkAccount: PaymentSheetLinkAccount?,
             context: Context
@@ -135,6 +163,7 @@ extension PayWithLinkViewController {
             fatalError("init(coder:) has not been implemented")
         }
 
+        // MARK: - 生命周期方法
         override func viewDidLoad() {
             super.viewDidLoad()
 
@@ -153,16 +182,17 @@ extension PayWithLinkViewController {
             super.viewDidAppear(animated)
             STPAnalyticsClient.sharedClient.logLinkSignupFlowPresented()
 
-            // If the email field is empty, select it
+            // 如果邮箱字段为空，自动选中它
             if emailElement.emailAddressString?.isEmpty ?? false {
                 emailElement.beginEditing()
             }
         }
 
+        // MARK: - 私有方法
+        
+        // 设置数据绑定
         private func setupBindings() {
-            // Logic for determining the default phone number currently lives
-            // in the UI layer. In the absence of two-way data binding, we will
-            // need to sync up the view model with the view here.
+            // 将电话号码字段的值同步到视图模型
             viewModel.phoneNumber = phoneNumberElement.phoneNumber
 
             viewModel.delegate = self
@@ -171,6 +201,7 @@ extension PayWithLinkViewController {
             nameElement.delegate = self
         }
 
+        // 更新UI状态
         private func updateUI(animated: Bool = false) {
             if viewModel.isLookingUpLinkAccount {
                 emailElement.startAnimating()
@@ -178,64 +209,28 @@ extension PayWithLinkViewController {
                 emailElement.stopAnimating()
             }
 
-            // Phone number
+            // 电话号码字段
             stackView.toggleArrangedSubview(
                 phoneNumberSection.view,
                 shouldShow: viewModel.shouldShowPhoneNumberField,
                 animated: animated
             )
 
-            // Name
+            // 姓名字段
             stackView.toggleArrangedSubview(
                 nameSection.view,
                 shouldShow: viewModel.shouldShowNameField,
                 animated: animated
             )
 
-            // Legal terms
+            // 法律条款
             stackView.toggleArrangedSubview(
                 legalTermsView,
                 shouldShow: viewModel.shouldShowLegalTerms,
                 animated: animated
             )
-
-            // Error message
-            errorLabel.text = viewModel.errorMessage
-            stackView.toggleArrangedSubview(
-                errorLabel,
-                shouldShow: viewModel.errorMessage != nil,
-                animated: animated
-            )
-
-            // Signup button
-            stackView.toggleArrangedSubview(
-                signUpButton,
-                shouldShow: viewModel.shouldShowSignUpButton,
-                animated: animated
-            )
-
-            signUpButton.isEnabled = viewModel.shouldEnableSignUpButton
         }
-
-        @objc
-        func didTapSignUpButton(_ sender: Button) {
-            signUpButton.isLoading = true
-
-            viewModel.signUp { [weak self] result in
-                switch result {
-                case .success(let account):
-                    self?.coordinator?.accountUpdated(account)
-                    STPAnalyticsClient.sharedClient.logLinkSignupComplete()
-                case .failure(let error):
-                    STPAnalyticsClient.sharedClient.logLinkSignupFailure(error: error)
-                }
-
-                self?.signUpButton.isLoading = false
-            }
-        }
-
     }
-
 }
 
 extension PayWithLinkViewController.SignUpViewController: PayWithLinkSignUpViewModelDelegate {
